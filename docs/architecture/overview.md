@@ -58,3 +58,4 @@ DevOpsPilot is architected as an automated software delivery and infrastructure 
   - Automated compile, lint, and test execution for backend (Maven) and frontend (npm).
 - **Container Build & Validation**:
   - Verification of Docker multi-stage builds on pull requests.
+

@@ -77,3 +77,4 @@ DevOpsPilot/
 5. **Phase 5: Automated Delivery & CI/CD**
    - Write GitHub Actions workflows for automated verification and container builds.
    - Containerize frontend and backend with multi-stage production Dockerfiles.
+
