@@ -23,6 +23,9 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
+# Upgrade Alpine base packages to resolve known OS-level CVEs
+RUN apk update && apk upgrade --no-cache && rm -rf /var/cache/apk/*
+
 # Add unprivileged user for security
 RUN addgroup -S devopspilot && adduser -S devopspilot -G devopspilot
 USER devopspilot
