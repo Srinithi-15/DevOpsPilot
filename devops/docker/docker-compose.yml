@@ -32,6 +32,7 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+    image: devopspilot-backend:${BACKEND_TAG:-latest}
     container_name: devopspilot-backend
     restart: unless-stopped
     depends_on:
@@ -57,7 +58,30 @@ services:
       - devopspilot-net
 
   # ----------------------------------------------------------------------------
-  # 3. Observability Scraper (Prometheus)
+  # 3. Frontend Web Application Service (React JSX + Nginx)
+  # ----------------------------------------------------------------------------
+  devopspilot-frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    image: devopspilot-frontend:${FRONTEND_TAG:-latest}
+    container_name: devopspilot-frontend
+    restart: unless-stopped
+    depends_on:
+      - devopspilot-backend
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - devopspilot-net
+
+  # ----------------------------------------------------------------------------
+  # 4. Observability Scraper (Prometheus)
   # ----------------------------------------------------------------------------
   devopspilot-prometheus:
     image: prom/prometheus:v2.53.0
@@ -80,7 +104,7 @@ services:
       - devopspilot-net
 
   # ----------------------------------------------------------------------------
-  # 4. Observability Dashboard (Grafana)
+  # 5. Observability Dashboard (Grafana)
   # ----------------------------------------------------------------------------
   devopspilot-grafana:
     image: grafana/grafana:11.1.0

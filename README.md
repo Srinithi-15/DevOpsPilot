@@ -61,20 +61,102 @@ DevOpsPilot/
 
 ## 🚦 Implementation Roadmap
 
-1. **Phase 1: Environment & Architecture Skeleton** *(Current)*
-   - Verify local toolchains (Java 21, Node, Docker, Git).
-   - Establish clean repository structure and git tracking.
-2. **Phase 2: Database Schema & Backend Core**
-   - Initialize Spring Boot 3 (Java 21) with Maven Wrapper.
-   - Configure MySQL container and Flyway database migrations for audit & deployment records.
-   - Implement real health check and system information endpoints.
-3. **Phase 3: Observability Stack Setup**
-   - Configure Spring Boot Micrometer + Prometheus Actuator endpoint.
-   - Setup Docker Compose for Prometheus and Grafana with automated provisioning.
-4. **Phase 4: Frontend Development**
-   - Initialize Vite + React project.
-   - Build service health dashboard and live status monitors connected to real backend APIs.
-5. **Phase 5: Automated Delivery & CI/CD**
-   - Write GitHub Actions workflows for automated verification and container builds.
-   - Containerize frontend and backend with multi-stage production Dockerfiles.
+1. **Phase 1: Environment & Architecture Skeleton** *(Completed)*
+   - Verified local toolchains (Java 21, Node.js 22, Docker, Git).
+   - Established clean repository structure and git tracking.
+2. **Phase 2: Database Schema & Backend Core** *(Completed)*
+   - Initialized Spring Boot 3 (Java 21) with Maven Wrapper.
+   - Configured MySQL 8.0 container on port 3307 and Flyway database migrations for `service_registry` and `deployment_records`.
+   - Implemented real health check (`/actuator/health`) and CRUD REST API endpoints.
+3. **Phase 3: Observability Stack Setup** *(Completed)*
+   - Configured Spring Boot Micrometer + Prometheus Actuator endpoint (`/actuator/prometheus`).
+   - Setup Docker Compose for Prometheus (9090) and Grafana (3000) with automated provisioning and telemetry dashboards.
+4. **Phase 4: Frontend Development** *(Completed)*
+   - Built modern React JSX Single Page Application with Vite and Tailwind CSS.
+   - Integrated live health banner, real-time service registry, deployment audit log, and Grafana telemetry links.
+5. **Phase 5: Automated Delivery & CI/CD** *(Completed)*
+   - Created GitHub Actions workflow (`.github/workflows/ci-cd.yml`) for automated Maven test, Node build, Trivy security scan, and Docker image builds.
+   - Built multi-stage Dockerfiles for backend (Temurin JDK 21 Alpine) and frontend (Node 22 + Nginx unprivileged Alpine).
+6. **Phase 6: Automated Deployment & Rollback** *(Completed)*
+   - Implemented zero-downtime automated deployment scripts (`deploy.ps1` / `deploy.sh`) and rollback scripts (`rollback.ps1` / `rollback.sh`).
+   - Automated health checks for Spring Boot Actuator and React frontend before finalizing deployments.
+   - Automated failure detection and instant rollback to `:previous` Docker image if health verification fails.
+   - Integrated real-time deployment logging directly into the MySQL audit trail (`POST /api/deployments`).
+
+---
+
+## 🚀 Automated Deployment & Rollback (Phase 6)
+
+DevOpsPilot provides automated zero-cloud deployment orchestration using local Docker Compose.
+
+### Stack Port Mapping
+
+| Service | Port | Description |
+|---|---|---|
+| **Frontend UI** | `http://127.0.0.1:5173` | React Single Page Application (Nginx reverse proxy to API) |
+| **Backend REST API** | `http://127.0.0.1:8080` | Spring Boot 3 + Java 21 REST API & Actuator |
+| **Prometheus** | `http://127.0.0.1:9090` | Time-series metrics scraper |
+| **Grafana** | `http://127.0.0.1:3000` | Operational dashboards (`admin` / `admin`) |
+| **MySQL Database** | `127.0.0.1:3307` | Relational storage (`devopspilot_mysql_data` volume) |
+
+### 1. Execute Automated Deployment
+
+Deploy all services or target services (`backend`, `frontend`, or `all`):
+
+**PowerShell (Windows):**
+```powershell
+# Deploy all containers with version tag v1.0.0
+powershell -ExecutionPolicy Bypass -File .\devops\scripts\deploy.ps1 -Version "v1.0.0" -Service "all"
+
+# Deploy backend only
+powershell -ExecutionPolicy Bypass -File .\devops\scripts\deploy.ps1 -Version "v1.0.1" -Service "backend"
+```
+
+**Bash (Linux / WSL2):**
+```bash
+./devops/scripts/deploy.sh "v1.0.0" "all"
+```
+
+### 2. Automated Rollback on Health Failure
+
+The deployment script executes a 5-step automated workflow:
+1. **Image Tag Backup**: Tags the currently running Docker images as `:previous`.
+2. **Build & Tag**: Builds the target application Docker image with the new version tag and `:latest`.
+3. **Container Update**: Redeploys the containers via `docker compose up -d --no-deps` without recreating the database or monitoring containers.
+4. **Health Verification**: Continuously polls `http://127.0.0.1:8080/actuator/health` and `http://127.0.0.1:5173` for readiness.
+5. **Success or Automatic Rollback**:
+   - If healthy within timeout: logs `DEPLOYED` to `deployment_records` audit trail in MySQL.
+   - If health check fails or times out: automatically re-tags `:previous` -> `:latest`, restarts containers, verifies health recovery, and logs `ROLLED_BACK` to MySQL.
+
+### 3. Testing Controlled Failure Scenario
+
+To test automated detection and rollback in a controlled failure scenario:
+
+**PowerShell (Windows):**
+```powershell
+powershell -ExecutionPolicy Bypass -File .\devops\scripts\deploy.ps1 -Version "v1.1.0-broken" -SimulateFailure -TimeoutSeconds 20
+```
+
+**Expected Outcome:**
+1. Script builds a broken image and deploys it.
+2. Health check detects startup failure and times out at 20s.
+3. Automated rollback immediately re-tags `previous` -> `latest` and recreates the container.
+4. System health recovers to `UP`.
+5. Rollback event is recorded into the MySQL `deployment_records` database table.
+6. The persistent MySQL volume `devopspilot_mysql_data` and all existing data are completely preserved.
+
+### 4. Manual Rollback Procedure
+
+To manually roll back to the previous stable release:
+
+**PowerShell (Windows):**
+```powershell
+powershell -ExecutionPolicy Bypass -File .\devops\scripts\rollback.ps1 -TargetVersion "previous" -Service "all"
+```
+
+**Bash (Linux / WSL2):**
+```bash
+./devops/scripts/rollback.sh "previous" "all"
+```
+
 
