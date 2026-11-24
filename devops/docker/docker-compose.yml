@@ -1,0 +1,32 @@
+services:
+  devopspilot-mysql:
+    image: mysql:8.0
+    container_name: devopspilot-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      # Bound strictly to localhost on host port 3307 to avoid public exposure and port 3306 conflicts
+      - "127.0.0.1:${MYSQL_HOST_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - devopspilot-net
+
+volumes:
+  mysql_data:
+    name: devopspilot_mysql_data
+
+networks:
+  devopspilot-net:
+    name: devopspilot_net
+    driver: bridge
