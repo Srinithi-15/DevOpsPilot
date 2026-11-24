@@ -1,4 +1,7 @@
 services:
+  # ----------------------------------------------------------------------------
+  # 1. Relational Database Service (MySQL 8.0)
+  # ----------------------------------------------------------------------------
   devopspilot-mysql:
     image: mysql:8.0
     container_name: devopspilot-mysql
@@ -9,7 +12,7 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      # Bound strictly to localhost on host port 3307 to avoid public exposure and port 3306 conflicts
+      # Bound strictly to 127.0.0.1 on host port 3307 to avoid host port 3306 conflicts
       - "127.0.0.1:${MYSQL_HOST_PORT:-3307}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
@@ -22,9 +25,91 @@ services:
     networks:
       - devopspilot-net
 
+  # ----------------------------------------------------------------------------
+  # 2. Core Backend Application Service (Spring Boot 3 + Java 21)
+  # ----------------------------------------------------------------------------
+  devopspilot-backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: devopspilot-backend
+    restart: unless-stopped
+    depends_on:
+      devopspilot-mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: devopspilot-mysql
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: dev
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/actuator/health | grep '\"status\":\"UP\"' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - devopspilot-net
+
+  # ----------------------------------------------------------------------------
+  # 3. Observability Scraper (Prometheus)
+  # ----------------------------------------------------------------------------
+  devopspilot-prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: devopspilot-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - devopspilot-net
+
+  # ----------------------------------------------------------------------------
+  # 4. Observability Dashboard (Grafana)
+  # ----------------------------------------------------------------------------
+  devopspilot-grafana:
+    image: grafana/grafana:11.1.0
+    container_name: devopspilot-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/devopspilot-overview.json
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ../monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - devopspilot-prometheus
+    networks:
+      - devopspilot-net
+
 volumes:
   mysql_data:
     name: devopspilot_mysql_data
+  prometheus_data:
+    name: devopspilot_prometheus_data
+  grafana_data:
+    name: devopspilot_grafana_data
 
 networks:
   devopspilot-net:
